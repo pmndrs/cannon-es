@@ -1378,6 +1378,7 @@ declare module "objects/WheelInfo" {
         maxSuspensionForce: number;
         engineForce: number;
         brake: number;
+        antiLockBraking: boolean;
         isFrontWheel: boolean;
         clippedInvContactDotSuspension: number;
         suspensionRelativeVelocity: number;
@@ -1419,6 +1420,7 @@ declare module "objects/WheelInfo" {
             skidInfo?: number;
             suspensionLength?: number;
             maxSuspensionTravel?: number;
+            antiLockBraking?: boolean;
             useCustomSlidingRotationalSpeed?: boolean;
             customSlidingRotationalSpeed?: number;
         });
@@ -1430,7 +1432,6 @@ declare module "objects/RaycastVehicle" {
     import { WheelInfo } from "objects/WheelInfo";
     import type { WheelInfoOptions } from "objects/WheelInfo";
     import type { Transform } from "math/Transform";
-    import type { Constraint } from "constraints/Constraint";
     import type { World } from "world/World";
     export type RaycastVehicleOptions = ConstructorParameters<typeof RaycastVehicle>[0];
     export class RaycastVehicle {
@@ -1441,10 +1442,10 @@ declare module "objects/RaycastVehicle" {
         indexRightAxis: number;
         indexForwardAxis: number;
         indexUpAxis: number;
-        constraints: Constraint[];
         preStepCallback: () => void;
         currentVehicleSpeedKmHour: number;
         numWheelsOnGround: number;
+        private update;
         constructor(options: {
             chassisBody: Body;
             indexRightAxis?: number;
@@ -1457,8 +1458,8 @@ declare module "objects/RaycastVehicle" {
         setBrake(brake: number, wheelIndex: number): void;
         addToWorld(world: World): void;
         private getVehicleAxisWorld;
-        updateVehicle(timeStep: number): void;
-        updateSuspension(deltaTime: number): void;
+        updateVehicle(): void;
+        updateSuspension(): void;
         removeFromWorld(world: World): void;
         castRay(wheel: WheelInfo): number;
         updateWheelTransformWorld(wheel: WheelInfo): void;

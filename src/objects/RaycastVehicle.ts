@@ -5,7 +5,6 @@ import { Ray } from '../collision/Ray'
 import { WheelInfo } from '../objects/WheelInfo'
 import type { WheelInfoOptions } from '../objects/WheelInfo'
 import type { Transform } from '../math/Transform'
-import type { Constraint } from '../constraints/Constraint'
 import type { World } from '../world/World'
 
 export type RaycastVehicleOptions = ConstructorParameters<typeof RaycastVehicle>[0]
@@ -27,13 +26,13 @@ export class RaycastVehicle {
   indexForwardAxis: number
   /** Index of the up axis. x=0, y=1, z=2 */
   indexUpAxis: number
-  /** The constraints. */
-  constraints: Constraint[]
   /** Optional pre-step callback. */
   preStepCallback: () => void
   currentVehicleSpeedKmHour: number
   /** Number of wheels on the ground. */
   numWheelsOnGround: number
+  // Internal pre-step callback
+  private update: () => void
 
   constructor(options: {
     /** The car chassis body. */
@@ -52,8 +51,8 @@ export class RaycastVehicle {
     this.indexRightAxis = typeof options.indexRightAxis !== 'undefined' ? options.indexRightAxis : 2
     this.indexForwardAxis = typeof options.indexForwardAxis !== 'undefined' ? options.indexForwardAxis : 0
     this.indexUpAxis = typeof options.indexUpAxis !== 'undefined' ? options.indexUpAxis : 1
-    this.constraints = []
     this.preStepCallback = () => {}
+    this.update = () => {}
     this.currentVehicleSpeedKmHour = 0
     this.numWheelsOnGround = 0
   }
@@ -92,16 +91,16 @@ export class RaycastVehicle {
   }
 
   /**
-   * Add the vehicle including its constraints to the world.
+   * Add the vehicle to the world.
    */
   addToWorld(world: World): void {
-    world.addBody(this.chassisBody)
-    const that = this
-    this.preStepCallback = () => {
-      that.updateVehicle(world.dt)
-    }
-    world.addEventListener('preStep', this.preStepCallback)
     this.world = world
+    world.addBody(this.chassisBody)
+    this.update = () => {
+      this.preStepCallback()
+      this.updateVehicle()
+    }
+    world.addEventListener('preStep', this.update)
   }
 
   /**
@@ -112,7 +111,7 @@ export class RaycastVehicle {
     this.chassisBody.vectorToWorldFrame(result, result)
   }
 
-  updateVehicle(timeStep: number): void {
+  updateVehicle(): void {
     const wheelInfos = this.wheelInfos
     const numWheels = wheelInfos.length
     const chassisBody = this.chassisBody
@@ -135,32 +134,28 @@ export class RaycastVehicle {
       this.castRay(wheelInfos[i])
     }
 
-    this.updateSuspension(timeStep)
+    this.updateSuspension()
 
     const impulse = new Vec3()
     const relpos = new Vec3()
     for (let i = 0; i < numWheels; i++) {
       //apply suspension force
       const wheel = wheelInfos[i]
-      let suspensionForce = wheel.suspensionForce
-      if (suspensionForce > wheel.maxSuspensionForce) {
-        suspensionForce = wheel.maxSuspensionForce
-      }
-      wheel.raycastResult.hitNormalWorld.scale(suspensionForce * timeStep, impulse)
+      const suspensionForce = Math.min(wheel.suspensionForce, wheel.maxSuspensionForce)
+
+      wheel.raycastResult.hitNormalWorld.scale(suspensionForce * this.world!.dt, impulse)
 
       wheel.raycastResult.hitPointWorld.vsub(chassisBody.position, relpos)
       chassisBody.applyImpulse(impulse, relpos)
     }
 
-    this.updateFriction(timeStep)
+    this.updateFriction(this.world!.dt)
 
     const hitNormalWorldScaledWithProj = new Vec3()
     const fwd = new Vec3()
     const vel = new Vec3()
     for (let i = 0; i < numWheels; i++) {
       const wheel = wheelInfos[i]
-      //const relpos = new Vec3();
-      //wheel.chassisConnectionPointWorld.vsub(chassisBody.position, relpos);
       chassisBody.getVelocityAtWorldPoint(wheel.chassisConnectionPointWorld, vel)
 
       // Hack to get the rotation in the correct direction
@@ -179,16 +174,16 @@ export class RaycastVehicle {
         fwd.vsub(hitNormalWorldScaledWithProj, fwd)
 
         const proj2 = fwd.dot(vel)
-        wheel.deltaRotation = (m * proj2 * timeStep) / wheel.radius
+        wheel.deltaRotation = (m * proj2 * this.world!.dt) / wheel.radius
       }
 
       if ((wheel.sliding || !wheel.isInContact) && wheel.engineForce !== 0 && wheel.useCustomSlidingRotationalSpeed) {
         // Apply custom rotation when accelerating and sliding
-        wheel.deltaRotation = (wheel.engineForce > 0 ? 1 : -1) * wheel.customSlidingRotationalSpeed * timeStep
+        wheel.deltaRotation = (wheel.engineForce > 0 ? 1 : -1) * wheel.customSlidingRotationalSpeed * this.world!.dt
       }
 
-      // Lock wheels
-      if (Math.abs(wheel.brake) > Math.abs(wheel.engineForce)) {
+      if (!wheel.antiLockBraking && Math.abs(wheel.brake) > Math.abs(wheel.engineForce)) {
+        // Lock wheels
         wheel.deltaRotation = 0
       }
 
@@ -197,7 +192,7 @@ export class RaycastVehicle {
     }
   }
 
-  updateSuspension(deltaTime: number): void {
+  updateSuspension(): void {
     const chassisBody = this.chassisBody
     const chassisMass = chassisBody.mass
     const wheelInfos = this.wheelInfos
@@ -226,7 +221,10 @@ export class RaycastVehicle {
         }
         force -= susp_damping * projected_rel_vel
 
-        wheel.suspensionForce = force * chassisMass
+        // Factor to prevent launching impulses when the wheel hits at a steep incline
+        const hitNormalDotWheelUp = wheel.raycastResult.hitNormalWorld.dot(wheel.directionWorld.negate())
+
+        wheel.suspensionForce = force * chassisMass * hitNormalDotWheelUp
         if (wheel.suspensionForce < 0) {
           wheel.suspensionForce = 0
         }
@@ -237,13 +235,12 @@ export class RaycastVehicle {
   }
 
   /**
-   * Remove the vehicle including its constraints from the world.
+   * Remove the vehicle from the world.
    */
   removeFromWorld(world: World): void {
-    const constraints = this.constraints
-    world.removeBody(this.chassisBody)
-    world.removeEventListener('preStep', this.preStepCallback)
     this.world = null
+    world.removeBody(this.chassisBody)
+    world.removeEventListener('preStep', this.update)
   }
 
   castRay(wheel: WheelInfo): number {
@@ -262,15 +259,14 @@ export class RaycastVehicle {
     source.vadd(rayvector, target)
     const raycastResult = wheel.raycastResult
 
-    const param = 0
-
     raycastResult.reset()
     // Turn off ray collision with the chassis temporarily
     const oldState = chassisBody.collisionResponse
     chassisBody.collisionResponse = false
 
     // Cast ray against world
-    this.world!.rayTest(source, target, raycastResult)
+    this.world!.raycastClosest(source, target, undefined, raycastResult)
+    
     chassisBody.collisionResponse = oldState
 
     const object = raycastResult.body

@@ -26,22 +26,33 @@
 
         // Create the vehicle
         const vehicle = new CANNON.RaycastVehicle({
-          chassisBody,
-        })
+          chassisBody
+        });
+
+        vehicle.preStepCallback = () => {
+          console.log("working");
+        };
+
+        setTimeout(() => {
+            vehicle.preStepCallback = () => {
+            console.log("working too");
+          }
+        }, 2000);
 
         const wheelOptions = {
           radius: 0.5,
           directionLocal: new CANNON.Vec3(0, -1, 0),
           suspensionStiffness: 30,
           suspensionRestLength: 0.3,
-          frictionSlip: 1.4,
-          dampingRelaxation: 2.3,
-          dampingCompression: 4.4,
-          maxSuspensionForce: 100000,
-          rollInfluence: 0.01,
+          // frictionSlip: 1.4,
+          // dampingRelaxation: 2.3,
+          // dampingCompression: 4.4,
+          // maxSuspensionForce: 100000,
+          // rollInfluence: 0.01,
           axleLocal: new CANNON.Vec3(0, 0, 1),
           chassisConnectionPointLocal: new CANNON.Vec3(-1, 0, 1),
           maxSuspensionTravel: 0.3,
+          antiLockBraking: true,
           customSlidingRotationalSpeed: -30,
           useCustomSlidingRotationalSpeed: true,
         }
@@ -64,7 +75,7 @@
         const wheelBodies = []
         const wheelMaterial = new CANNON.Material('wheel')
         vehicle.wheelInfos.forEach((wheel) => {
-          const cylinderShape = new CANNON.Cylinder(wheel.radius, wheel.radius, wheel.radius / 2, 20)
+          const cylinderShape = new CANNON.Cylinder(wheel.radius, wheel.radius, wheel.radius / 2, 3)
           const wheelBody = new CANNON.Body({
             mass: 0,
             material: wheelMaterial,
@@ -108,21 +119,18 @@
         }
 
         const groundMaterial = new CANNON.Material('ground')
-        const heightfieldShape = new CANNON.Heightfield(matrix, {
-          elementSize: 100 / sizeX,
-        })
-        const heightfieldBody = new CANNON.Body({ mass: 0, material: groundMaterial })
-        heightfieldBody.addShape(heightfieldShape)
-        heightfieldBody.position.set(
-          // -((sizeX - 1) * heightfieldShape.elementSize) / 2,
-          -(sizeX * heightfieldShape.elementSize) / 2,
-          -1,
-          // ((sizeZ - 1) * heightfieldShape.elementSize) / 2
-          (sizeZ * heightfieldShape.elementSize) / 2
-        )
-        heightfieldBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0)
-        world.addBody(heightfieldBody)
-        demo.addVisual(heightfieldBody)
+
+        const planeShape = new CANNON.Box(new CANNON.Vec3(128, 1, 128))
+        const planeBody = new CANNON.Body({ type: CANNON.BODY_TYPES.STATIC, shape: planeShape, material: groundMaterial })
+        const testShape = new CANNON.Box(new CANNON.Vec3(8, 1, 4))
+        planeBody.addShape(testShape, new CANNON.Vec3(0, 0.2, 6))
+        world.addBody(planeBody)
+        demo.addVisual(planeBody)
+
+        // const testBody = new CANNON.Body({ type: CANNON.BODY_TYPES.STATIC, shape: testShape, material: groundMaterial })
+        // testBody.position.set(0, 0.2, 6)
+        // world.addBody(testBody)
+        // demo.addVisual(testBody)
 
         // Define interactions between wheels and ground
         const wheel_ground = new CANNON.ContactMaterial(wheelMaterial, groundMaterial, {
@@ -137,7 +145,7 @@
         document.addEventListener('keydown', (event) => {
           const maxSteerVal = 0.5
           const maxForce = 1000
-          const brakeForce = 1000000
+          const brakeForce = 3
 
           switch (event.key) {
             case 'w':

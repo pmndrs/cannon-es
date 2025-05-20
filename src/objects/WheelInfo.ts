@@ -132,6 +132,11 @@ export class WheelInfo {
    */
   brake: number
   /**
+   * antiLockBraking
+   * @default false
+   */
+  antiLockBraking: boolean
+  /**
    * isFrontWheel
    * @default true
    */
@@ -315,6 +320,11 @@ export class WheelInfo {
        */
       maxSuspensionTravel?: number
       /**
+       * If the wheel should rotate when braking. (ABS)
+       * @default false
+       */
+      antiLockBraking?: boolean
+      /**
        * If the customSlidingRotationalSpeed should be used.
        * @default false
        */
@@ -355,6 +365,7 @@ export class WheelInfo {
       skidInfo: 0,
       suspensionLength: 0,
       maxSuspensionTravel: 1,
+      antiLockBraking: false,
       useCustomSlidingRotationalSpeed: false,
       customSlidingRotationalSpeed: -0.1,
     })
@@ -385,6 +396,7 @@ export class WheelInfo {
     this.maxSuspensionForce = options.maxSuspensionForce!
     this.engineForce = 0
     this.brake = 0
+    this.antiLockBraking = options.antiLockBraking!
     this.isFrontWheel = options.isFrontWheel!
     this.clippedInvContactDotSuspension = 1
     this.suspensionRelativeVelocity = 0
