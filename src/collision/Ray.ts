@@ -705,12 +705,14 @@ export class Ray {
       return
     }
 
-    result.hitFaceIndex = typeof hitFaceIndex !== 'undefined' ? hitFaceIndex : -1
+    // Store the face index with the accepted hit; a farther hit must not overwrite it.
+    const faceIndex = typeof hitFaceIndex !== 'undefined' ? hitFaceIndex : -1
 
     switch (this.mode) {
       case Ray.ALL:
         this.hasHit = true
         result.set(from, to, normal, hitPointWorld, shape, body, distance)
+        result.hitFaceIndex = faceIndex
         result.hasHit = true
         this.callback(result)
         break
@@ -721,6 +723,7 @@ export class Ray {
           this.hasHit = true
           result.hasHit = true
           result.set(from, to, normal, hitPointWorld, shape, body, distance)
+          result.hitFaceIndex = faceIndex
         }
         break
 
@@ -729,6 +732,7 @@ export class Ray {
         this.hasHit = true
         result.hasHit = true
         result.set(from, to, normal, hitPointWorld, shape, body, distance)
+        result.hitFaceIndex = faceIndex
         result.shouldStop = true
         break
     }
