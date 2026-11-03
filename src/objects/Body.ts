@@ -622,7 +622,8 @@ export class Body extends EventTarget {
   }
 
   /**
-   * Convert a local body point to world frame.
+   * Convert a local body vector to world frame using the body's rotation.
+   * Unlike a point, the vector is not translated by the body's position.
    */
   vectorToWorldFrame(localVector: Vec3, result = new Vec3()): Vec3 {
     this.quaternion.vmult(localVector, result)
